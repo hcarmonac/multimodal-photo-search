@@ -1,8 +1,19 @@
+from dataclasses import dataclass
 from pathlib import Path
 
 import chromadb
 
 from src.config import CHROMA_COLLECTION_NAME, CHROMA_DB_PATH, DEFAULT_TOP_K
+
+
+@dataclass(slots=True)
+class SearchResult:
+    path: Path
+    similarity: float
+    date_iso: str | None = None
+    timestamp: int | None = None
+    temporal_score: float = 0.0
+    final_score: float = 0.0
 
 
 class PhotoVectorStore:
@@ -28,7 +39,7 @@ class PhotoVectorStore:
         self,
         ids: list[str],
         embeddings: list[list[float]],
-        metadatas: list[dict[str, str]],
+        metadatas: list[dict[str, str | int]],
     ) -> None:
         if not ids:
             return
@@ -42,7 +53,7 @@ class PhotoVectorStore:
         self,
         query_embedding: list[float],
         k: int = DEFAULT_TOP_K,
-    ) -> list[tuple[str, float]]:
+    ) -> list[SearchResult]:
         total = self.count()
         if total == 0:
             return []
@@ -56,9 +67,18 @@ class PhotoVectorStore:
         metadatas = results["metadatas"][0]
         distances = results["distances"][0]
 
-        matches: list[tuple[str, float]] = []
+        matches: list[SearchResult] = []
         for meta, distance in zip(metadatas, distances):
-            similarity = 1.0 - float(distance)
-            matches.append((meta["path"], similarity))
+            sim = 1.0 - float(distance)
+            raw_ts = meta.get("timestamp")
+            matches.append(
+                SearchResult(
+                    path=Path(str(meta["path"])),
+                    similarity=sim,
+                    date_iso=str(meta["date_iso"]) if "date_iso" in meta else None,
+                    timestamp=int(raw_ts) if raw_ts is not None else None,
+                    final_score=sim,
+                )
+            )
 
         return matches

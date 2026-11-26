@@ -6,9 +6,7 @@ from PIL import Image, ImageOps
 from src.config import BATCH_SIZE, THUMBNAIL_SIZE, VALID_EXTENSIONS
 from src.database import PhotoVectorStore
 from src.encoders import MultimodalEncoder
-
-EXIF_DATETIME_ORIGINAL = 36867
-EXIF_DATETIME = 306
+from src.metadata import extract_photo_metadata
 
 
 def _compute_sha256(file_path: Path) -> str:
@@ -17,12 +15,6 @@ def _compute_sha256(file_path: Path) -> str:
         for chunk in iter(lambda: f.read(65536), b""):
             hasher.update(chunk)
     return hasher.hexdigest()
-
-
-def _extract_exif_date(image: Image.Image) -> str:
-    exif = image.getexif()
-    raw_date = exif.get(EXIF_DATETIME_ORIGINAL) or exif.get(EXIF_DATETIME)
-    return str(raw_date) if raw_date else ""
 
 
 def index_directory(
@@ -61,12 +53,12 @@ def index_directory(
         batch = pending_files[start : start + BATCH_SIZE]
         batch_ids: list[str] = []
         batch_images: list[Image.Image] = []
-        batch_metadatas: list[dict[str, str]] = []
+        batch_metadatas: list[dict[str, str | int]] = []
 
         for file_hash, path in batch:
             try:
                 with Image.open(path) as img:
-                    date_taken = _extract_exif_date(img)
+                    meta = extract_photo_metadata(img, path)
                     photo = ImageOps.exif_transpose(img).convert("RGB")
                     photo.thumbnail(THUMBNAIL_SIZE)
             except OSError as error:
@@ -75,13 +67,7 @@ def index_directory(
 
             batch_ids.append(file_hash)
             batch_images.append(photo)
-            batch_metadatas.append(
-                {
-                    "path": str(path.resolve()),
-                    "filename": path.name,
-                    "date_taken": date_taken,
-                }
-            )
+            batch_metadatas.append(meta)
 
         if not batch_images:
             continue

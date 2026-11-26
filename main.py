@@ -48,10 +48,25 @@ def main() -> None:
         if not descripcion:
             break
 
-        resultados = search_photos(descripcion, db, encoder)
+        resultados, tiene_fecha = search_photos(descripcion, db, encoder)
 
-        for posicion, (ruta, similitud) in enumerate(resultados, start=1):
-            print(f"{posicion}. {ruta.name} (similitud: {similitud:.3f})")
+        if not resultados:
+            print("No hay fotos indexadas en la base de datos.")
+            continue
+
+        for posicion, item in enumerate(resultados, start=1):
+            if tiene_fecha:
+                detalles = (
+                    f"score: {item.final_score:.3f} "
+                    f"[sem: {item.similarity:.3f} | temp: {item.temporal_score:.2f}]"
+                )
+            else:
+                detalles = f"similitud: {item.similarity:.3f}"
+
+            if item.date_iso:
+                detalles += f" | fecha: {item.date_iso}"
+
+            print(f"{posicion}. {item.path.name} ({detalles})")
 
 
 if __name__ == "__main__":

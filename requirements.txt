@@ -1,4 +1,6 @@
 sentence-transformers[image]
 pillow
+pillow-heif
 numpy
 chromadb
+python-dotenv
