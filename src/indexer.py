@@ -22,6 +22,18 @@ def index_directory(
     db: PhotoVectorStore,
     encoder: MultimodalEncoder,
 ) -> int:
+    # 1. Eliminar de la BD fotos borradas o movidas de su ruta original
+    stored_paths = db.get_all_paths()
+    missing_ids = [
+        photo_id
+        for photo_id, path_str in stored_paths.items()
+        if not Path(path_str).is_file()
+    ]
+    if missing_ids:
+        db.delete_photos(missing_ids)
+        print(f"Registros obsoletos eliminados: {len(missing_ids)}")
+
+    # 2. Escanear fotos actuales en la carpeta
     candidate_files = [
         path
         for path in sorted(directory.rglob("*"))
@@ -31,6 +43,7 @@ def index_directory(
     if not candidate_files:
         raise ValueError(f"No encontré fotos compatibles en {directory}")
 
+    # 3. Filtrar las que ya están indexadas
     existing_ids = db.get_existing_ids()
     seen_hashes: set[str] = set()
     pending_files: list[tuple[str, Path]] = []

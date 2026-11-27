@@ -49,6 +49,19 @@ class PhotoVectorStore:
             metadatas=metadatas,
         )
 
+    def get_all_paths(self) -> dict[str, str]:
+        records = self.collection.get(include=["metadatas"])
+        return {
+            photo_id: str(meta["path"])
+            for photo_id, meta in zip(records["ids"], records["metadatas"])
+            if meta and "path" in meta
+        }
+
+    def delete_photos(self, ids: list[str]) -> None:
+        if not ids:
+            return
+        self.collection.delete(ids=ids)
+
     def search(
         self,
         query_embedding: list[float],
