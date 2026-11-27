@@ -8,7 +8,7 @@ El sistema combina recuperación densa en un **espacio latente multimodal compar
 
 1. **Encoder visual con carga diferida (`clip-ViT-B-32`):** Extrae embeddings normalizados tras corregir la orientación EXIF y redimensionar las imágenes (incluyendo soporte nativo para archivos `.heic`/`.heif` mediante `pillow-heif`). Solo se carga en memoria cuando existen fotografías nuevas por indexar.
 2. **Encoder textual multilingüe (`clip-ViT-B-32-multilingual-v1`):** Proyecta consultas en español al mismo espacio vectorial que el modelo visual.
-3. **Persistencia e indexación incremental (`ChromaDB`):** Almacena los vectores en disco usando métrica de similitud coseno junto con el hash SHA-256 y la fecha original de captura extraída de las cabeceras EXIF (`DateTimeOriginal`), evitando recalcular embeddings en ejecuciones posteriores.
+3. **Persistencia y sincronización incremental (`ChromaDB`):** Almacena los vectores en disco usando métrica de similitud coseno junto con el hash SHA-256 y la fecha original de captura extraída de las cabeceras EXIF (`DateTimeOriginal`). Al sincronizar una carpeta, evita recalcular embeddings existentes y purga automáticamente los registros huérfanos de fotografías borradas, movidas o renombradas en disco.
 4. **Re-ranking híbrido con decaimiento temporal:** Cuando la consulta incluye una referencia temporal en español (ej. *"en verano de 2024"*, *"septiembre del 2026"*), el analizador separa la fecha del concepto visual para no introducir ruido en CLIP, recupera un conjunto amplio de candidatos desde el índice HNSW y reordena los resultados combinando la similitud coseno con un impulso exponencial según la cercanía a la fecha solicitada (sin excluir imágenes que carezcan de metadatos EXIF).
 
 ## Estructura del proyecto
@@ -20,8 +20,8 @@ multimodal-photo-search/
 │   ├── config.py           # Constantes, modelos, rutas y parámetros de re-ranking
 │   ├── encoders.py         # Carga diferida de modelos CLIP y generación de embeddings
 │   ├── metadata.py         # Decodificación HEIC y extracción de fechas EXIF reales
-│   ├── database.py         # Wrapper de ChromaDB (persistencia y búsqueda coseno)
-│   ├── indexer.py          # Escaneo recursivo, hashes SHA-256 e indexación incremental
+│   ├── database.py         # Wrapper de ChromaDB (persistencia, borrado y búsqueda coseno)
+│   ├── indexer.py          # Escaneo recursivo, hashes SHA-256, indexación y limpieza de huérfanos
 │   └── search.py           # Parsing temporal en español y re-ranking en dos etapas
 ├── main.py                 # Interfaz CLI
 ├── requirements.txt
@@ -42,13 +42,13 @@ pip install -r requirements.txt
 
 ### Ejecución
 
-Primera ejecución (indexa las imágenes de la carpeta y las guarda en `.chroma_db/`):
+Sincronizando una carpeta (indexa fotos nuevas en `.chroma_db/` y elimina registros de archivos borrados o movidos):
 
 ```bash
 python main.py ruta/a/tus/fotos
 ```
 
-Siguientes ejecuciones (arranca directamente contra la base de datos persistente):
+Arranque rápido (consulta directamente sobre la base de datos persistente sin escanear el directorio):
 
 ```bash
 python main.py
@@ -62,7 +62,7 @@ Ejemplos de consultas soportadas:
 
 ## Hoja de ruta (Próximas mejoras)
 
-- [x] **Persistencia con base de datos vectorial local (ChromaDB):** Almacenar los embeddings en disco junto con un identificador único de cada archivo para evitar recalcular vectores en cada ejecución y habilitar indexación incremental.
+- [x] **Persistencia y sincronización con base de datos vectorial local (ChromaDB):** Almacenar los embeddings en disco junto con un identificador único de cada archivo para habilitar indexación incremental y limpieza automática de registros obsoletos.
 - [x] **Búsqueda híbrida por metadatos temporales (EXIF / HEIC):** Extraer fechas de captura reales de los metadatos EXIF (incluyendo formato `.heic` de iCloud) y aplicar re-ranking con decaimiento temporal exponencial ante consultas con fechas en lenguaje natural.
 - [ ] **Clustering automático y mapa 2D de la galería:** Aplicar reducción de dimensionalidad (UMAP) y agrupamiento no supervisado (HDBSCAN / K-Means) sobre los embeddings para generar álbumes temáticos automáticos y visualizar la colección de forma interactiva.
 - [ ] **Búsqueda *Image-to-Image*:** Permitir usar una fotografía de referencia como consulta para encontrar imágenes visualmente o semánticamente similares dentro de la galería.
